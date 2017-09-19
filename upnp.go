@@ -66,17 +66,16 @@ type upnpRoot struct {
 
 // Discover discovers UPnP InternetGatewayDevices.
 // The order in which the devices appear in the results list is not deterministic.
-func Discover(timeout time.Duration) []Device {
-	var results []Device
+func Discover(ch chan<- Device, timeout time.Duration) error {
+	defer close(ch)
 
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		//l.Infoln("Listing network interfaces:", err)
-		return results
+		return err
 	}
 
 	resultChan := make(chan IGD)
-
 	wg := &sync.WaitGroup{}
 
 	for _, intf := range interfaces {
@@ -111,7 +110,7 @@ nextResult:
 		}
 
 		result := result // Reallocate as we need to keep a pointer
-		results = append(results, &result)
+		ch <- &result
 		seenResults[result.ID()] = true
 
 		//l.Debugf("UPnP discovery result %s with services:", result.uuid)
@@ -120,7 +119,7 @@ nextResult:
 		//}
 	}
 
-	return results
+	return nil
 }
 
 // Search for UPnP InternetGatewayDevices for <timeout> seconds, ignoring responses from any devices listed in knownDevices.
