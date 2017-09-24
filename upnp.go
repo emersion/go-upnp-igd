@@ -47,6 +47,16 @@ import (
 	"time"
 )
 
+type nopLogger struct{}
+
+func (nopLogger) Printf(format string, v ...interface{}) {}
+func (nopLogger) Println(v ...interface{}) {}
+
+var Logger interface{
+	Printf(format string, v ...interface{})
+	Println(v ...interface{})
+} = nopLogger{}
+
 type upnpService struct {
 	ID         string `xml:"serviceId"`
 	Type       string `xml:"serviceType"`
@@ -71,7 +81,7 @@ func Discover(ch chan<- Device, timeout time.Duration) error {
 
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		//l.Infoln("Listing network interfaces:", err)
+		//l.Println("Listing network interfaces:", err)
 		return err
 	}
 
@@ -102,10 +112,10 @@ func Discover(ch chan<- Device, timeout time.Duration) error {
 nextResult:
 	for result := range resultChan {
 		if seenResults[result.ID()] {
-			//l.Debugf("Skipping duplicate result %s with services:", result.uuid)
-			//for _, service := range result.services {
-			//	l.Debugf("* [%s] %s", service.ID, service.URL)
-			//}
+			Logger.Printf("Skipping duplicate result %s with services:", result.uuid)
+			for _, service := range result.services {
+				Logger.Printf("* [%s] %s", service.ID, service.URL)
+			}
 			continue nextResult
 		}
 
@@ -113,10 +123,10 @@ nextResult:
 		ch <- &result
 		seenResults[result.ID()] = true
 
-		//l.Debugf("UPnP discovery result %s with services:", result.uuid)
-		//for _, service := range result.services {
-		//	l.Debugf("* [%s] %s", service.ID, service.URL)
-		//}
+		Logger.Printf("UPnP discovery result %s with services:", result.uuid)
+		for _, service := range result.services {
+			Logger.Printf("* [%s] %s", service.ID, service.URL)
+		}
 	}
 
 	return nil
@@ -139,32 +149,32 @@ USER-AGENT: syncthing/1.0
 
 	search := []byte(strings.Replace(searchStr, "\n", "\r\n", -1))
 
-	//l.Debugln("Starting discovery of device type", deviceType, "on", intf.Name)
+	Logger.Println("Starting discovery of device type", deviceType, "on", intf.Name)
 
 	socket, err := net.ListenMulticastUDP("udp4", intf, &net.UDPAddr{IP: ssdp.IP})
 	if err != nil {
-		//l.Debugln(err)
+		Logger.Println(err)
 		return
 	}
 	defer socket.Close() // Make sure our socket gets closed
 
 	err = socket.SetDeadline(time.Now().Add(timeout))
 	if err != nil {
-		//l.Infoln(err)
+		Logger.Println(err)
 		return
 	}
 
-	//l.Debugln("Sending search request for device type", deviceType, "on", intf.Name)
+	Logger.Println("Sending search request for device type", deviceType, "on", intf.Name)
 
 	_, err = socket.WriteTo(search, ssdp)
 	if err != nil {
 		if e, ok := err.(net.Error); !ok || !e.Timeout() {
-			//l.Infoln(err)
+			Logger.Println(err)
 		}
 		return
 	}
 
-	//l.Debugln("Listening for UPnP response for device type", deviceType, "on", intf.Name)
+	Logger.Println("Listening for UPnP response for device type", deviceType, "on", intf.Name)
 
 	// Listen for responses until a timeout is reached
 	for {
@@ -172,22 +182,22 @@ USER-AGENT: syncthing/1.0
 		n, _, err := socket.ReadFrom(resp)
 		if err != nil {
 			if e, ok := err.(net.Error); !ok || !e.Timeout() {
-				//l.Infoln("UPnP read:", err) //legitimate error, not a timeout.
+				Logger.Println("UPnP read:", err) //legitimate error, not a timeout.
 			}
 			break
 		}
 		igd, err := parseResponse(deviceType, resp[:n])
 		if err != nil {
-			//l.Infoln("UPnP parse:", err)
+			Logger.Println("UPnP parse:", err)
 			continue
 		}
 		results <- igd
 	}
-	//l.Debugln("Discovery for device type", deviceType, "on", intf.Name, "finished.")
+	Logger.Println("Discovery for device type", deviceType, "on", intf.Name, "finished.")
 }
 
 func parseResponse(deviceType string, resp []byte) (IGD, error) {
-	//l.Debugln("Handling UPnP response:\n\n" + string(resp))
+	Logger.Println("Handling UPnP response:\n\n" + string(resp))
 
 	reader := bufio.NewReader(bytes.NewBuffer(resp))
 	request := &http.Request{}
@@ -209,7 +219,7 @@ func parseResponse(deviceType string, resp []byte) (IGD, error) {
 	deviceDescriptionURL, err := url.Parse(deviceDescriptionLocation)
 
 	if err != nil {
-		//l.Infoln("Invalid IGD location: " + err.Error())
+		Logger.Println("Invalid IGD location: " + err.Error())
 	}
 
 	deviceUSN := response.Header.Get("USN")
@@ -325,31 +335,31 @@ func getIGDServices(rootURL string, device upnpDevice, wanDeviceURN string, wanC
 	devices := getChildDevices(device, wanDeviceURN)
 
 	if len(devices) < 1 {
-		//l.Infoln(rootURL, "- malformed InternetGatewayDevice description: no WANDevices specified.")
+		Logger.Println(rootURL, "- malformed InternetGatewayDevice description: no WANDevices specified.")
 		return result
 	}
 
 	for _, device := range devices {
 		connections := getChildDevices(device, wanConnectionURN)
 
-		//if len(connections) < 1 {
-		//	l.Infoln(rootURL, "- malformed ", wanDeviceURN, "description: no WANConnectionDevices specified.")
-		//}
+		if len(connections) < 1 {
+			Logger.Println(rootURL, "- malformed ", wanDeviceURN, "description: no WANConnectionDevices specified.")
+		}
 
 		for _, connection := range connections {
 			for _, URN := range URNs {
 				services := getChildServices(connection, URN)
 
-				//l.Debugln(rootURL, "- no services of type", URN, " found on connection.")
+				Logger.Println(rootURL, "- no services of type", URN, " found on connection.")
 
 				for _, service := range services {
 					if len(service.ControlURL) == 0 {
-						//l.Infoln(rootURL+"- malformed", service.Type, "description: no control URL.")
+						Logger.Println(rootURL+"- malformed", service.Type, "description: no control URL.")
 					} else {
 						u, _ := url.Parse(rootURL)
 						replaceRawPath(u, service.ControlURL)
 
-						//l.Debugln(rootURL, "- found", service.Type, "with URL", u)
+						Logger.Println(rootURL, "- found", service.Type, "with URL", u)
 
 						service := IGDService{ID: service.ID, URL: u.String(), URN: service.Type}
 
@@ -409,18 +419,18 @@ func soapRequest(url, service, function, message string) ([]byte, error) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Pragma", "no-cache")
 
-	//l.Debugln("SOAP Request URL: " + url)
-	//l.Debugln("SOAP Action: " + req.Header.Get("SOAPAction"))
-	//l.Debugln("SOAP Request:\n\n" + body)
+	Logger.Println("SOAP Request URL: " + url)
+	Logger.Println("SOAP Action: " + req.Header.Get("SOAPAction"))
+	Logger.Println("SOAP Request:\n\n" + body)
 
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
-		//l.Debugln(err)
+		Logger.Println(err)
 		return resp, err
 	}
 
 	resp, _ = ioutil.ReadAll(r.Body)
-	//l.Debugf("SOAP Response: %s\n\n%s\n\n", r.Status, resp)
+	Logger.Printf("SOAP Response: %s\n\n%s\n\n", r.Status, resp)
 
 	r.Body.Close()
 
