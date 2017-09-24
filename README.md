@@ -18,11 +18,19 @@ import (
 )
 
 func main() {
-	devices := igd.Discover(10 * time.Second)
-	for _, d := range devices {
-		log.Println(d)
+	devices := make(chan igd.Device)
+	go func() {
+		for d := range devices {
+			log.Println(d)
+		}
+	}()
+
+	err := igd.Discover(devices, 30*time.Second)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
+
 ```
 
 ## License
