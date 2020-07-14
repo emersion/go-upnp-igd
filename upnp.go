@@ -138,14 +138,14 @@ func discover(intf *net.Interface, deviceType string, timeout time.Duration, res
 	ssdp := &net.UDPAddr{IP: []byte{239, 255, 255, 250}, Port: 1900}
 
 	tpl := `M-SEARCH * HTTP/1.1
-HOST: 239.255.255.250:1900
+HOST: %s
 ST: %s
 MAN: "ssdp:discover"
 MX: %d
 USER-AGENT: syncthing/1.0
 
 `
-	searchStr := fmt.Sprintf(tpl, deviceType, timeout/time.Second)
+	searchStr := fmt.Sprintf(tpl, ssdp, deviceType, timeout/time.Second)
 
 	search := []byte(strings.Replace(searchStr, "\n", "\r\n", -1))
 
