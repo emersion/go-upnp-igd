@@ -50,9 +50,9 @@ import (
 type nopLogger struct{}
 
 func (nopLogger) Printf(format string, v ...interface{}) {}
-func (nopLogger) Println(v ...interface{}) {}
+func (nopLogger) Println(v ...interface{})               {}
 
-var Logger interface{
+var Logger interface {
 	Printf(format string, v ...interface{})
 	Println(v ...interface{})
 } = nopLogger{}
